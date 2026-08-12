@@ -579,6 +579,11 @@
                     <echo message="Setup flags to use during linking" />
 
                     <!-- If we compile on linux we need to adjust the ldflags to correct link libstdc++ -->
+                    <!-- NOTE: -static-libgcc was tried here to drop the DT_NEEDED on libgcc_s.so.1
+                         (not a musl-reserved name). It is a no-op in this build: the library is linked
+                         with the C driver, so the _Unwind_* symbols pulled in by libstdc++.a stay
+                         undefined and libgcc_s.so.1 remains genuinely required. Alpine satisfies it
+                         with the `libgcc` package, which the JDK images already install. -->
                     <if>
                       <equals arg1="${os.detected.name}" arg2="linux" />
                       <then>
@@ -613,6 +618,26 @@
                       <then>
                         <exec executable="strip" failonerror="true" dir="${nativeLibOnlyDir}/META-INF/native/linux${archBits}/" resolveexecutable="true">
                           <arg value="--strip-debug" />
+                          <arg value="libnetty_tcnative.so" />
+                        </exec>
+                      </then>
+                    </if>
+
+                    <!-- Drop the DT_NEEDED on ld-linux-<arch>.so. It gets recorded because
+                         __tls_get_addr lives in glibc's loader, but musl defines that symbol itself,
+                         so only the filename lookup fails - on Alpine the library is unloadable
+                         purely because of this entry. Removing it is a no-op on glibc, where the
+                         loader is already mapped. patchelf exits 0 when the entry is absent, so this
+                         is safe on architectures that never had it. Same approach as async-profiler.
+                         See https://github.com/netty/netty-tcnative/issues/907 -->
+                    <if>
+                      <equals arg1="${os.detected.name}" arg2="linux" />
+                      <then>
+                        <exec executable="patchelf" failonerror="true" dir="${nativeLibOnlyDir}/META-INF/native/linux${archBits}/" resolveexecutable="true">
+                          <arg value="--remove-needed" />
+                          <arg value="ld-linux-x86-64.so.2" />
+                          <arg value="--remove-needed" />
+                          <arg value="ld-linux-aarch64.so.1" />
                           <arg value="libnetty_tcnative.so" />
                         </exec>
                       </then>
@@ -920,6 +945,23 @@
                       <then>
                         <exec executable="aarch64-none-linux-gnu-strip" failonerror="true" dir="${nativeLibOnlyDir}/META-INF/native/linux${archBits}/" resolveexecutable="true">
                           <arg value="--strip-debug" />
+                          <arg value="libnetty_tcnative.so" />
+                        </exec>
+                      </then>
+                    </if>
+
+                    <!-- Same ld-linux DT_NEEDED removal as the default profile, so both released
+                         Linux artifacts get it. patchelf is arch-agnostic, so the x86_64 host tool
+                         edits the cross-built aarch64 object fine, and it exits 0 when the entry is
+                         absent. See docs/musl-compatibility.md -->
+                    <if>
+                      <equals arg1="${os.detected.name}" arg2="linux" />
+                      <then>
+                        <exec executable="patchelf" failonerror="true" dir="${nativeLibOnlyDir}/META-INF/native/linux${archBits}/" resolveexecutable="true">
+                          <arg value="--remove-needed" />
+                          <arg value="ld-linux-x86-64.so.2" />
+                          <arg value="--remove-needed" />
+                          <arg value="ld-linux-aarch64.so.1" />
                           <arg value="libnetty_tcnative.so" />
                         </exec>
                       </then>
