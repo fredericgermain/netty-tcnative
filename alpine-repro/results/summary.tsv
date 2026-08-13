@@ -1,0 +1,121 @@
+target	level	status	detail
+epoll/4.2.12.Final/x86_64/bare	A	PASS	loaded libnetty_transport_native_epoll_x86_64.so
+epoll/4.2.17.Final/x86_64/bare	A	PASS	loaded libnetty_transport_native_epoll_x86_64.so
+tcnative/2.0.65.Final/x86_64/bare	A	PASS	loaded libnetty_tcnative_linux_x86_64.so
+tcnative/2.0.73.Final/x86_64/bare	A	FAIL	UnsatisfiedLinkError: /tmp/nativelib18071345232932461106/libnetty_tcnative_linux_x86_64.so: Error loading shared library ld-linux-x86-64.so.2: No such file or directory (needed by /tmp/nativelib18071345232932461106/libnetty_tcnative_linux_x86_64.so)
+tcnative/2.0.75.Final/x86_64/bare	A	FAIL	UnsatisfiedLinkError: /tmp/nativelib1275328797580385386/libnetty_tcnative_linux_x86_64.so: Error loading shared library ld-linux-x86-64.so.2: No such file or directory (needed by /tmp/nativelib1275328797580385386/libnetty_tcnative_linux_x86_64.so)
+tcnative/2.0.81.Final/x86_64/bare	A	FAIL	UnsatisfiedLinkError: /tmp/nativelib14255850778687697375/libnetty_tcnative_linux_x86_64.so: Error loading shared library ld-linux-x86-64.so.2: No such file or directory (needed by /tmp/nativelib14255850778687697375/libnetty_tcnative_linux_x86_64.so)
+asyncProfiler/4.1/x86_64/bare	A	PASS	loaded libasyncProfiler-x86_64.so
+epoll/4.2.12.Final/x86_64/bare	B-epoll	PASS	Epoll.isAvailable()=true
+epoll/4.2.17.Final/x86_64/bare	B-epoll	PASS	Epoll.isAvailable()=true
+tcnative/2.0.65.Final/x86_64/bare	B-openssl	PASS	OpenSsl.isAvailable()=true BoringSSL
+tcnative/2.0.73.Final/x86_64/bare	B-openssl	FAIL	IllegalArgumentException: Failed to load any of the given libraries: [netty_tcnative_linux_x86_64, netty_tcnative_linux_x86_64_fedora, netty_tcnative_x86_64, netty_tcnative]
+tcnative/2.0.75.Final/x86_64/bare	B-openssl	FAIL	IllegalArgumentException: Failed to load any of the given libraries: [netty_tcnative_linux_x86_64, netty_tcnative_linux_x86_64_fedora, netty_tcnative_x86_64, netty_tcnative]
+tcnative/2.0.81.Final/x86_64/bare	B-openssl	FAIL	IllegalArgumentException: Failed to load any of the given libraries: [netty_tcnative_linux_x86_64, netty_tcnative_linux_x86_64_fedora, netty_tcnative_x86_64, netty_tcnative]
+tcnative/2.0.65.Final/x86_64+patchelf	A	PASS	loaded libnetty_tcnative_linux_x86_64.so
+tcnative/2.0.65.Final/x86_64+patchelf+shim	A	PASS	loaded libnetty_tcnative_linux_x86_64.so
+tcnative/2.0.73.Final/x86_64+patchelf	A	PASS	loaded libnetty_tcnative_linux_x86_64.so
+tcnative/2.0.73.Final/x86_64+patchelf+shim	A	PASS	loaded libnetty_tcnative_linux_x86_64.so
+tcnative/2.0.75.Final/x86_64+patchelf	A	PASS	loaded libnetty_tcnative_linux_x86_64.so
+tcnative/2.0.75.Final/x86_64+patchelf+shim	A	PASS	loaded libnetty_tcnative_linux_x86_64.so
+tcnative/2.0.81.Final/x86_64+patchelf	A	PASS	loaded libnetty_tcnative_linux_x86_64.so
+tcnative/2.0.81.Final/x86_64+patchelf+shim	A	PASS	loaded libnetty_tcnative_linux_x86_64.so
+epoll/4.2.12.Final/aarch64/bare	A	PASS	loaded libnetty_transport_native_epoll_aarch_64.so
+epoll/4.2.17.Final/aarch64/bare	A	PASS	loaded libnetty_transport_native_epoll_aarch_64.so
+tcnative/2.0.65.Final/aarch64/bare	A	FAIL	UnsatisfiedLinkError: /tmp/nativelib14091514150179680718/libnetty_tcnative_linux_aarch_64.so: Error loading shared library libcrypt.so.1: No such file or directory (needed by /tmp/nativelib14091514150179680718/libnetty_tcnative_linux_aarch_64.so)
+tcnative/2.0.73.Final/aarch64/bare	A	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_64.so+0x2466c
+tcnative/2.0.75.Final/aarch64/bare	A	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_64.so+0x2466c
+tcnative/2.0.81.Final/aarch64/bare	A	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_64.so+0x2476c
+asyncProfiler/4.1/aarch64/bare	A	PASS	loaded libasyncProfiler-aarch_64.so
+epoll/4.2.12.Final/aarch64/bare	B-epoll	PASS	Epoll.isAvailable()=true
+epoll/4.2.17.Final/aarch64/bare	B-epoll	PASS	Epoll.isAvailable()=true
+tcnative/2.0.65.Final/aarch64/bare	B-openssl	FAIL	IllegalArgumentException: Failed to load any of the given libraries: [netty_tcnative_linux_aarch_64, netty_tcnative_linux_aarch_64_fedora, netty_tcnative_aarch_64, netty_tcnative]
+tcnative/2.0.73.Final/aarch64/bare	B-openssl	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_649260085168121315908.so+0x2466c
+tcnative/2.0.75.Final/aarch64/bare	B-openssl	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_6416842424876023521975.so+0x2466c
+tcnative/2.0.81.Final/aarch64/bare	B-openssl	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_646336042613490351802.so+0x2476c
+tcnative/2.0.65.Final/aarch64+patchelf	A	FAIL	UnsatisfiedLinkError: /tmp/p/META-INF/native/libnetty_tcnative_linux_aarch_64.so: Error loading shared library libcrypt.so.1: No such file or directory (needed by /tmp/p/META-INF/native/libnetty_tcnative_linux_aarch_64.so)
+tcnative/2.0.65.Final/aarch64+patchelf+shim	A	FAIL	UnsatisfiedLinkError: /tmp/p/META-INF/native/libnetty_tcnative_linux_aarch_64.so: Error loading shared library libcrypt.so.1: No such file or directory (needed by /tmp/p/META-INF/native/libnetty_tcnative_linux_aarch_64.so)
+tcnative/2.0.73.Final/aarch64+patchelf	A	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_64.so+0x2466c
+tcnative/2.0.73.Final/aarch64+patchelf+shim	A	PASS	loaded libnetty_tcnative_linux_aarch_64.so
+tcnative/2.0.75.Final/aarch64+patchelf	A	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_64.so+0x2466c
+tcnative/2.0.75.Final/aarch64+patchelf+shim	A	PASS	loaded libnetty_tcnative_linux_aarch_64.so
+tcnative/2.0.81.Final/aarch64+patchelf	A	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_64.so+0x2476c
+tcnative/2.0.81.Final/aarch64+patchelf+shim	A	PASS	loaded libnetty_tcnative_linux_aarch_64.so
+epoll/4.2.12.Final/x86_64/libc6-compat	A	PASS	loaded libnetty_transport_native_epoll_x86_64.so
+epoll/4.2.17.Final/x86_64/libc6-compat	A	PASS	loaded libnetty_transport_native_epoll_x86_64.so
+tcnative/2.0.65.Final/x86_64/libc6-compat	A	PASS	loaded libnetty_tcnative_linux_x86_64.so
+tcnative/2.0.73.Final/x86_64/libc6-compat	A	PASS	loaded libnetty_tcnative_linux_x86_64.so
+tcnative/2.0.75.Final/x86_64/libc6-compat	A	PASS	loaded libnetty_tcnative_linux_x86_64.so
+tcnative/2.0.81.Final/x86_64/libc6-compat	A	PASS	loaded libnetty_tcnative_linux_x86_64.so
+asyncProfiler/4.1/x86_64/libc6-compat	A	PASS	loaded libasyncProfiler-x86_64.so
+epoll/4.2.12.Final/x86_64/libc6-compat	B-epoll	PASS	Epoll.isAvailable()=true
+epoll/4.2.17.Final/x86_64/libc6-compat	B-epoll	PASS	Epoll.isAvailable()=true
+tcnative/2.0.65.Final/x86_64/libc6-compat	B-openssl	PASS	OpenSsl.isAvailable()=true BoringSSL
+tcnative/2.0.73.Final/x86_64/libc6-compat	B-openssl	PASS	OpenSsl.isAvailable()=true BoringSSL
+tcnative/2.0.75.Final/x86_64/libc6-compat	B-openssl	PASS	OpenSsl.isAvailable()=true BoringSSL
+tcnative/2.0.81.Final/x86_64/libc6-compat	B-openssl	PASS	OpenSsl.isAvailable()=true BoringSSL
+epoll/4.2.12.Final/aarch64/full	A	PASS	loaded libnetty_transport_native_epoll_aarch_64.so
+epoll/4.2.17.Final/aarch64/full	A	PASS	loaded libnetty_transport_native_epoll_aarch_64.so
+tcnative/2.0.65.Final/aarch64/full	A	PASS	loaded libnetty_tcnative_linux_aarch_64.so
+tcnative/2.0.73.Final/aarch64/full	A	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_64.so+0x2466c
+tcnative/2.0.75.Final/aarch64/full	A	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_64.so+0x2466c
+tcnative/2.0.81.Final/aarch64/full	A	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_64.so+0x2476c
+asyncProfiler/4.1/aarch64/full	A	PASS	loaded libasyncProfiler-aarch_64.so
+epoll/4.2.12.Final/aarch64/full	B-epoll	PASS	Epoll.isAvailable()=true
+epoll/4.2.17.Final/aarch64/full	B-epoll	PASS	Epoll.isAvailable()=true
+tcnative/2.0.65.Final/aarch64/full	B-openssl	PASS	OpenSsl.isAvailable()=true BoringSSL
+tcnative/2.0.73.Final/aarch64/full	B-openssl	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_6417852273939624083155.so+0x2466c
+tcnative/2.0.75.Final/aarch64/full	B-openssl	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_6415042990680852284108.so+0x2466c
+tcnative/2.0.81.Final/aarch64/full	B-openssl	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_646512294374358995542.so+0x2476c
+epoll/4.2.12.Final/x86_64/gcompat	A	PASS	loaded libnetty_transport_native_epoll_x86_64.so
+epoll/4.2.17.Final/x86_64/gcompat	A	PASS	loaded libnetty_transport_native_epoll_x86_64.so
+tcnative/2.0.65.Final/x86_64/gcompat	A	PASS	loaded libnetty_tcnative_linux_x86_64.so
+tcnative/2.0.73.Final/x86_64/gcompat	A	PASS	loaded libnetty_tcnative_linux_x86_64.so
+tcnative/2.0.75.Final/x86_64/gcompat	A	PASS	loaded libnetty_tcnative_linux_x86_64.so
+tcnative/2.0.81.Final/x86_64/gcompat	A	PASS	loaded libnetty_tcnative_linux_x86_64.so
+asyncProfiler/4.1/x86_64/gcompat	A	PASS	loaded libasyncProfiler-x86_64.so
+epoll/4.2.12.Final/x86_64/gcompat	B-epoll	PASS	Epoll.isAvailable()=true
+epoll/4.2.17.Final/x86_64/gcompat	B-epoll	PASS	Epoll.isAvailable()=true
+tcnative/2.0.65.Final/x86_64/gcompat	B-openssl	PASS	OpenSsl.isAvailable()=true BoringSSL
+tcnative/2.0.73.Final/x86_64/gcompat	B-openssl	PASS	OpenSsl.isAvailable()=true BoringSSL
+tcnative/2.0.75.Final/x86_64/gcompat	B-openssl	PASS	OpenSsl.isAvailable()=true BoringSSL
+tcnative/2.0.81.Final/x86_64/gcompat	B-openssl	PASS	OpenSsl.isAvailable()=true BoringSSL
+epoll/4.2.12.Final/aarch64/libc6-compat	A	PASS	loaded libnetty_transport_native_epoll_aarch_64.so
+epoll/4.2.17.Final/aarch64/libc6-compat	A	PASS	loaded libnetty_transport_native_epoll_aarch_64.so
+tcnative/2.0.65.Final/aarch64/libc6-compat	A	PASS	loaded libnetty_tcnative_linux_aarch_64.so
+tcnative/2.0.73.Final/aarch64/libc6-compat	A	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_64.so+0x2466c
+tcnative/2.0.75.Final/aarch64/libc6-compat	A	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_64.so+0x2466c
+tcnative/2.0.81.Final/aarch64/libc6-compat	A	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_64.so+0x2476c
+asyncProfiler/4.1/aarch64/libc6-compat	A	PASS	loaded libasyncProfiler-aarch_64.so
+epoll/4.2.12.Final/aarch64/libc6-compat	B-epoll	PASS	Epoll.isAvailable()=true
+epoll/4.2.17.Final/aarch64/libc6-compat	B-epoll	PASS	Epoll.isAvailable()=true
+tcnative/2.0.65.Final/aarch64/libc6-compat	B-openssl	PASS	OpenSsl.isAvailable()=true BoringSSL
+tcnative/2.0.73.Final/aarch64/libc6-compat	B-openssl	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_6415517550562899652683.so+0x2466c
+tcnative/2.0.75.Final/aarch64/libc6-compat	B-openssl	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_644682676946611136352.so+0x2466c
+tcnative/2.0.81.Final/aarch64/libc6-compat	B-openssl	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_6411024635108731307153.so+0x2476c
+epoll/4.2.12.Final/aarch64/gcompat	A	PASS	loaded libnetty_transport_native_epoll_aarch_64.so
+epoll/4.2.17.Final/aarch64/gcompat	A	PASS	loaded libnetty_transport_native_epoll_aarch_64.so
+tcnative/2.0.65.Final/aarch64/gcompat	A	PASS	loaded libnetty_tcnative_linux_aarch_64.so
+tcnative/2.0.73.Final/aarch64/gcompat	A	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_64.so+0x2466c
+tcnative/2.0.75.Final/aarch64/gcompat	A	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_64.so+0x2466c
+tcnative/2.0.81.Final/aarch64/gcompat	A	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_64.so+0x2476c
+asyncProfiler/4.1/aarch64/gcompat	A	PASS	loaded libasyncProfiler-aarch_64.so
+epoll/4.2.12.Final/aarch64/gcompat	B-epoll	PASS	Epoll.isAvailable()=true
+epoll/4.2.17.Final/aarch64/gcompat	B-epoll	PASS	Epoll.isAvailable()=true
+tcnative/2.0.65.Final/aarch64/gcompat	B-openssl	PASS	OpenSsl.isAvailable()=true BoringSSL
+tcnative/2.0.73.Final/aarch64/gcompat	B-openssl	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_642106592729811162058.so+0x2466c
+tcnative/2.0.75.Final/aarch64/gcompat	B-openssl	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_648178737654854016661.so+0x2466c
+tcnative/2.0.81.Final/aarch64/gcompat	B-openssl	FAIL	JVM-CRASH exit=1 in libnetty_tcnative_linux_aarch_6417672284333068479293.so+0x2476c
+epoll/4.2.12.Final/aarch64/glibc	A	PASS	loaded libnetty_transport_native_epoll_aarch_64.so
+epoll/4.2.17.Final/aarch64/glibc	A	PASS	loaded libnetty_transport_native_epoll_aarch_64.so
+tcnative/2.0.65.Final/aarch64/glibc	A	PASS	loaded libnetty_tcnative_linux_aarch_64.so
+tcnative/2.0.73.Final/aarch64/glibc	A	PASS	loaded libnetty_tcnative_linux_aarch_64.so
+tcnative/2.0.75.Final/aarch64/glibc	A	PASS	loaded libnetty_tcnative_linux_aarch_64.so
+tcnative/2.0.81.Final/aarch64/glibc	A	PASS	loaded libnetty_tcnative_linux_aarch_64.so
+asyncProfiler/4.1/aarch64/glibc	A	PASS	loaded libasyncProfiler-aarch_64.so
+epoll/4.2.12.Final/aarch64/glibc	B-epoll	PASS	Epoll.isAvailable()=true
+epoll/4.2.17.Final/aarch64/glibc	B-epoll	PASS	Epoll.isAvailable()=true
+tcnative/2.0.65.Final/aarch64/glibc	B-openssl	PASS	OpenSsl.isAvailable()=true BoringSSL
+tcnative/2.0.73.Final/aarch64/glibc	B-openssl	PASS	OpenSsl.isAvailable()=true BoringSSL
+tcnative/2.0.75.Final/aarch64/glibc	B-openssl	PASS	OpenSsl.isAvailable()=true BoringSSL
+tcnative/2.0.81.Final/aarch64/glibc	B-openssl	PASS	OpenSsl.isAvailable()=true BoringSSL

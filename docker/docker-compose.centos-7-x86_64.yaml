@@ -1,0 +1,66 @@
+version: "3"
+
+# Native x86_64 build on CentOS 7, aligned with docker-compose.centos-7.yaml (aarch64 cross).
+# Mirrors docker-compose.centos-6.yaml service-for-service; the only differences are the
+# image/dockerfile and the OPENSSL_VERSION passed through to the environment.
+# See docs/musl-compatibility.md for why the CentOS 6 image cannot be built on a modern kernel.
+
+services:
+
+  runtime-setup:
+    image: netty-tcnative-centos7:x86_64
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile.centos7
+      args:
+        openssl_version: "${OPENSSL_VERSION:-3.6.1}"
+        openssl_sha256: "${OPENSSL_SHA256:-b1bfedcd5b289ff22aee87c9d600f515767ebf45f77168cb6d64f231f518a82e}"
+        apr_version: "${APR_VERSION:-1.7.6}"
+        devtoolset_version: "${DEVTOOLSET_VERSION:-10}"
+
+  common: &common
+    image: netty-tcnative-centos7:x86_64
+    depends_on: [runtime-setup]
+    environment:
+      - GPG_KEYNAME
+      - GPG_PASSPHRASE
+      - GPG_PRIVATE_KEY
+      - MAVEN_OPTS
+      - OPENSSL_VERSION=${OPENSSL_VERSION:-3.6.1}
+    volumes:
+      - ~/.ssh:/root/.ssh:delegated
+      - ~/.m2/repository:/root/.m2/repository
+      - ~/.gnupg:/root/.gnupg:delegated
+      - ..:/code:delegated
+    working_dir: /code
+
+  build-clean:
+    <<: *common
+    command: /bin/bash -cl "./mvnw clean package -DopensslHome=/opt/openssl-$$OPENSSL_VERSION"
+
+  build:
+    <<: *common
+    command: /bin/bash -cl "./mvnw clean package -DopensslHome=/opt/openssl-$$OPENSSL_VERSION"
+
+  build-boringssl-static:
+    <<: *common
+    command: /bin/bash -cl "./mvnw clean package -am -pl openssl-classes,boringssl-static -DskipTests"
+
+  stage-snapshot:
+    <<: *common
+    volumes:
+      - ~/.ssh:/root/.ssh
+      - ~/.m2/repository:/root/.m2/repository
+      - ~/.gnupg:/root/.gnupg
+      - ..:/code
+      - ~/local-staging:/root/local-staging
+    command: /bin/bash -cl "./mvnw -Pstage -am -pl openssl-dynamic,boringssl-static clean package org.sonatype.plugins:nexus-staging-maven-plugin:deploy -DaltStagingDirectory=/root/local-staging -DskipTests=true -DopensslHome=/opt/openssl-$$OPENSSL_VERSION"
+
+  shell:
+    <<: *common
+    volumes:
+      - ~/.ssh:/root/.ssh:delegated
+      - ~/.m2:/root/.m2:delegated
+      - ~/.gnupg:/root/.gnupg:delegated
+      - ..:/code:delegated
+    entrypoint: /bin/bash -l

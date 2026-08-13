@@ -1,0 +1,9 @@
+# glibc control image. Everything that fails on Alpine must PASS here -- otherwise the
+# harness is broken rather than the libraries being musl-incompatible.
+FROM eclipse-temurin:21-jdk-jammy
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends bash binutils patchelf gcc libc6-dev unzip \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /w

@@ -1,0 +1,44 @@
+# glibc image for building netty-tcnative locally. Arch comes from `docker build --platform`,
+# so the same file serves linux/arm64 (native here) and linux/amd64 (emulated here).
+#
+# Upstream releases linux-aarch_64 by CROSS-compiling from x86_64 (the `linux-aarch64`
+# profile, enforced at boringssl-static/pom.xml). On Apple Silicon that path runs the
+# CentOS 7 image under qemu, which is slow. Building natively with the DEFAULT profile
+# produces the same linux-aarch_64 classifier without emulation.
+#
+# Trade-off, deliberately accepted for a LOCAL build: Rocky 8 has glibc 2.28, whereas the
+# release images are CentOS 6/7 (glibc 2.12/2.17). The resulting .so therefore requires
+# glibc >= 2.28 on glibc systems. It is unaffected on musl, which is the target here.
+# Do not ship this artifact as a replacement for the official one.
+FROM rockylinux:8
+
+ENV PATCHELF_VERSION=0.18.0
+
+# ninja-build lives in PowerTools on Rocky 8, which is disabled by default.
+RUN dnf -y install epel-release dnf-plugins-core \
+ && dnf config-manager --set-enabled powertools \
+ && dnf -y install --allowerasing \
+      git wget curl tar unzip zip which patch make autoconf automake libtool \
+      gcc gcc-c++ cmake ninja-build golang perl perl-core python3 \
+      java-1.8.0-openjdk-devel patchelf \
+      libstdc++-static \
+ && dnf clean all
+# libstdc++-static supplies libstdc++.a, required by the build's existing
+# "-static-libstdc++ -l:libstdc++.a" link line (also in PowerTools).
+
+# APR's buildconf looks for a plain `python`; Rocky 8 only provides `python3`.
+RUN ln -sf /usr/bin/python3 /usr/local/bin/python
+
+# patchelf from EPEL may lag; the post-link step needs --remove-needed, present since 0.9,
+# so the distro package is fine. Verify rather than assume.
+RUN patchelf --version
+
+ENV JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk
+ENV PATH=$JAVA_HOME/bin:$PATH
+
+# The source tree is bind-mounted from the host, so it is owned by the host uid while the
+# container runs as root. Without this, git refuses to operate ("dubious ownership") and the
+# maven-scm-plugin BoringSSL checkout fails.
+RUN git config --global --add safe.directory '*'
+
+WORKDIR /src

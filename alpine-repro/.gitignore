@@ -1,0 +1,12 @@
+# Downloaded artifacts under test — run ./fetch-jars.sh
+libs/
+# Compiled test classes and scratch build output
+out/
+out-tls/
+# Raw run logs; only summary.tsv and the crash evidence are tracked
+results/*.log
+!results/evidence-*.log
+# JVM crash artifacts from the SIGSEGV this harness reproduces
+core
+hs_err_pid*.log
+replay_pid*.log

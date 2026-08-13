@@ -1,0 +1,14 @@
+# Test image for the Alpine/musl reproduction.
+#
+# The compat packages are deliberately NOT baked in: EXTRA_PKGS is set per variant so each
+# package set is measured independently (bare / libc6-compat / gcompat / full).
+FROM eclipse-temurin:21.0.11_10-jdk-alpine-3.23
+
+# Toolchain the harness itself needs. binutils gives readelf/nm; patchelf and gcc/musl-dev
+# are only used by the async-profiler-style feasibility probe.
+RUN apk add --no-cache bash binutils patchelf gcc musl-dev unzip
+
+ARG EXTRA_PKGS=""
+RUN if [ -n "$EXTRA_PKGS" ]; then apk add --no-cache $EXTRA_PKGS; fi
+
+WORKDIR /w

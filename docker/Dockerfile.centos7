@@ -1,0 +1,94 @@
+FROM --platform=linux/amd64 centos:7.9.2009
+
+# Native x86_64 build image, aligned with Dockerfile.cross_compile_aarch64 (same base, same
+# gcc generation, same OpenSSL/APR versions) so both released Linux artifacts come from
+# CentOS 7 rather than one from CentOS 6 and one from CentOS 7.
+#
+# Trade-off: the x86_64 artifact's glibc floor rises. Measured on the produced .so, the highest
+# versioned reference is GLIBC_2.16 (not 2.17 -- the host's glibc bounds what *can* be
+# referenced, not what is), against <= GLIBC_2.12 from the CentOS 6 image. Concretely that drops
+# RHEL/CentOS 6 (2.12) and Ubuntu 12.04 (2.15); RHEL 7 (2.17) and anything newer are unaffected.
+# Re-measure after toolchain changes with:
+#   readelf -V <lib> | grep -oE 'GLIBC_[0-9.]+' | sort -uV | tail -1
+#
+# In exchange the image is actually buildable on a current kernel -- CentOS 6.10 userspace
+# segfaults without `vsyscall=emulate`, so Dockerfile.centos6 cannot be built on a modern host
+# at all. See docs/musl-compatibility.md.
+
+ARG openssl_version=3.6.1
+ARG openssl_sha256
+ARG apr_version=1.7.6
+ARG devtoolset_version=10
+ENV SOURCE_DIR /root/source
+ENV OPENSSL_VERSION $openssl_version
+ENV OPENSSL_SHA256 $openssl_sha256
+ENV APR_VERSION $apr_version
+ENV DEVTOOLSET_VERSION $devtoolset_version
+ENV MAVEN_VERSION 3.9.1
+ENV CMAKE_VERSION_BASE 3.26
+ENV CMAKE_VERSION $CMAKE_VERSION_BASE.4
+ENV PATCHELF_VERSION 0.18.0
+
+RUN mkdir $SOURCE_DIR
+WORKDIR $SOURCE_DIR
+
+# Update to use the vault
+RUN sed -i -e 's/^mirrorlist/#mirrorlist/g' -e 's/^#baseurl=http:\/\/mirror.centos.org\/centos\/$releasever\//baseurl=https:\/\/linuxsoft.cern.ch\/centos-vault\/\/7.9.2009\//g' /etc/yum.repos.d/CentOS-Base.repo
+
+# Install requirements. perl 5.16 from the base repo is sufficient for BoringSSL here, which
+# is why this image needs no perlbrew (unlike the CentOS 6 one).
+RUN set -x && \
+  yum -y install epel-release && \
+  yum -y install wget tar git make autoconf automake libtool openssl-devel ninja-build patch unzip zip which perl perl-IPC-Cmd perl-Time-Piece patchelf python
+
+# Install Java and Go
+RUN yum install -y java-1.8.0-openjdk-devel golang
+ENV JAVA_HOME="/usr/lib/jvm/java-1.8.0-openjdk/"
+
+# devtoolset for a modern C/C++ compiler: the CentOS 7 system gcc is 4.8.5, too old for
+# BoringSSL. devtoolset-10 matches the gcc generation of the aarch64 cross toolchain.
+# -libstdc++-devel supplies libstdc++.a, needed by the build's `-l:libstdc++.a` link line.
+RUN yum install -y centos-release-scl && \
+  sed -i -e 's/^mirrorlist/#mirrorlist/g' -e 's|^# baseurl=http://mirror.centos.org/centos/7/|baseurl=https://vault.centos.org/centos/7/|g' /etc/yum.repos.d/CentOS-SCLo-scl.repo && \
+  sed -i -e 's/^mirrorlist/#mirrorlist/g' -e 's|^#baseurl=http://mirror.centos.org/centos/7/|baseurl=https://vault.centos.org/centos/7/|g' /etc/yum.repos.d/CentOS-SCLo-scl-rh.repo && \
+  yum -y install devtoolset-$DEVTOOLSET_VERSION-gcc devtoolset-$DEVTOOLSET_VERSION-gcc-c++ devtoolset-$DEVTOOLSET_VERSION-libstdc++-devel && \
+  echo "source /opt/rh/devtoolset-$DEVTOOLSET_VERSION/enable" >> ~/.bashrc
+
+# Build OpenSSL 3.x from source, for openssl-dynamic (boringssl-static uses --with-ssl=no)
+RUN set -x && \
+  source /opt/rh/devtoolset-$DEVTOOLSET_VERSION/enable && \
+  wget https://github.com/openssl/openssl/releases/download/openssl-$OPENSSL_VERSION/openssl-$OPENSSL_VERSION.tar.gz && \
+  echo "$OPENSSL_SHA256  openssl-$OPENSSL_VERSION.tar.gz" | sha256sum -c - && \
+  tar xvf openssl-$OPENSSL_VERSION.tar.gz && \
+  (cd openssl-$OPENSSL_VERSION && \
+  # no-asm: CentOS 7's binutils 2.27 cannot assemble OpenSSL 3.6's AVX-512 sources
+  # ("number of operands mismatch for valignq" in crypto/bn/rsaz-4k-avx512.s). Same
+  # workaround, and same reason, as Dockerfile.centos6. Keeping no-asm also means this image
+  # produces an OpenSSL equivalent to the CentOS 6 one rather than a differently-optimised
+  # build. The alternative would be installing devtoolset-$DEVTOOLSET_VERSION-binutils.
+  ./Configure linux-x86_64 --prefix=/opt/openssl-$OPENSSL_VERSION --libdir=lib shared no-asm no-apps && \
+  make -j$(nproc) install_sw) && \
+  rm -rf openssl-$OPENSSL_VERSION openssl-$OPENSSL_VERSION.tar.gz
+
+# Install cmake
+RUN curl -s https://cmake.org/files/v$CMAKE_VERSION_BASE/cmake-$CMAKE_VERSION-linux-x86_64.tar.gz --output cmake-$CMAKE_VERSION-linux-x86_64.tar.gz && tar zvxf cmake-$CMAKE_VERSION-linux-x86_64.tar.gz && mv cmake-$CMAKE_VERSION-linux-x86_64 /opt/ && echo 'PATH=/opt/cmake-$CMAKE_VERSION-linux-x86_64/bin:$PATH' >> ~/.bashrc
+
+# Downloading and installing SDKMAN!
+RUN curl -s "https://get.sdkman.io" | bash
+
+# Don't check the certificates as our curl version is too old.
+RUN echo 'sdkman_insecure_ssl=true' >> $HOME/.sdkman/etc/config
+
+# Installing Maven, removing some unnecessary SDKMAN files
+RUN bash -c "source $HOME/.sdkman/bin/sdkman-init.sh && \
+    yes | sdk install maven $MAVEN_VERSION && \
+    rm -rf $HOME/.sdkman/archives/* && \
+    rm -rf $HOME/.sdkman/tmp/*"
+
+# Prepare our own build
+ENV PATH /root/.sdkman/candidates/maven/current:$PATH
+
+# Cleanup
+RUN rm -rf $SOURCE_DIR
+RUN yum clean all && \
+    rm -rf /var/cache/yum
