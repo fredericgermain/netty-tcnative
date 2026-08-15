@@ -420,13 +420,16 @@
                   <equals arg1="${os.detected.name}" arg2="osx" />
                 </condition>
 
+                <!-- jniArch, not os.detected.arch: on a cross-compile they differ, and this header
+                     must describe the library in the jar rather than the machine that built it.
+                     The released linux-aarch_64 artifacts declare processor=x86_64 because of this. -->
                 <!-- In OSGi specification, the alias of x86_32 is x86... -->
                 <condition property="nativeCode.processor" value="x86">
-                  <equals arg1="${os.detected.arch}" arg2="x86_32" />
+                  <equals arg1="${jniArch}" arg2="x86_32" />
                 </condition>
                 <!-- ... and aarch_64 is aarch64 -->
-                <condition property="nativeCode.processor" value="aarch64" else="${os.detected.arch}">
-                  <equals arg1="${os.detected.arch}" arg2="aarch_64" />
+                <condition property="nativeCode.processor" value="aarch64" else="${jniArch}">
+                  <equals arg1="${jniArch}" arg2="aarch_64" />
                 </condition>
 
                 <property name="tcnativeManifest" value="META-INF/native/${tcnative.snippet};processor=${nativeCode.processor}" />
