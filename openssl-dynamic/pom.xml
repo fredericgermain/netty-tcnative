@@ -322,6 +322,81 @@
         </plugins>
       </build>
     </profile>
+
+    <!--
+      Cross-compile the osx-x86_64 artifact from an Apple Silicon machine, so it does not need an
+      Intel runner. Selected with -P; deliberately no <activation>, matching the mac cross profiles
+      in boringssl-static.
+
+      Unlike boringssl-static, which statically links a BoringSSL it built itself, this module links
+      shared OpenSSL and APR. Homebrew on Apple Silicon provides only arm64 under /opt/homebrew, and
+      the /usr/local prefixes the mac-x86_64 profile expects do not exist there, so the x86_64
+      libraries must be built first with scripts/build-mac-x86_64-deps.sh. That script also sets
+      their install names to the Homebrew locations the released artifact records, so the library
+      linked here ends up with the same dependency paths as a native Intel build.
+
+      crossCompile is deliberately NOT set: it would select the APR branch in the parent pom, which
+      is hardcoded to arm64. This module does not build APR at all (linkStatic is false), so leaving
+      it unset avoids that path entirely.
+    -->
+    <profile>
+      <id>mac-intel-cross-compile</id>
+      <properties>
+        <target>x86_64-apple-macos10.12</target>
+        <macCrossMinVersion>10.12</macCrossMinVersion>
+        <!-- Must be a normalized path. apr-1-config switches to a "crosscompile" mode when it is
+             invoked by absolute path, and derives APR_TARGET_DIR by stripping its own bindir
+             suffix; a ".." in the path defeats that strip and it emits doubled include paths. -->
+        <macCrossDeps>${project.parent.basedir}/.mac-x86_64-deps</macCrossDeps>
+        <jniArch>x86_64</jniArch>
+        <jniClassifier>${os.detected.name}-x86_64</jniClassifier>
+        <nativeLibOsParts>${os.detected.name}_x86_64</nativeLibOsParts>
+        <javaModuleNameClassifier>${os.detected.name}.x86_64</javaModuleNameClassifier>
+        <nativeJarFile>${project.build.directory}/${project.build.finalName}-${os.detected.name}-x86_64.jar</nativeJarFile>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.fusesource.hawtjni</groupId>
+            <artifactId>hawtjni-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>build-native-lib</id>
+                <configuration>
+                  <name>netty_tcnative</name>
+                  <nativeSourceDirectory>${generatedSourcesDir}/c</nativeSourceDirectory>
+                  <libDirectory>${nativeLibOnlyDir}</libDirectory>
+                  <forceAutogen>${forceAutogen}</forceAutogen>
+                  <forceConfigure>${forceConfigure}</forceConfigure>
+                  <!-- override, not merge: -P does not deactivate the arch-activated mac-aarch64
+                       profile, so without this its /opt/homebrew configureArgs would be appended
+                       to these and the wrong prefixes could win. -->
+                  <configureArgs combine.self="override">
+                    <configureArg>--host=x86_64-apple-darwin</configureArg>
+                    <configureArg>--with-apr=${macCrossDeps}</configureArg>
+                    <configureArg>--with-ssl=${macCrossDeps}</configureArg>
+                    <!-- configure.ac only defaults CFLAGS when it is unset, so passing it here replaces the
+                         whole set. These are its defaults verbatim (src/main/native-package/configure.ac)
+                         plus the cross flags; dropping -fvisibility=hidden exported every internal
+                         symbol, and dropping -Wno-deprecated-declarations broke -Werror on OpenSSL 3. -->
+                    <configureArg>CFLAGS=-target ${target} -mmacosx-version-min=${macCrossMinVersion} -O3 -Werror -fno-omit-frame-pointer -fvisibility=hidden -Wunused -Wno-unused-value -Wno-deprecated-declarations</configureArg>
+                    <!-- -target is needed on the link line too, not just when compiling: without it
+                         the linker stamps LC_BUILD_VERSION from the host SDK (minos 26.0 here),
+                         which would restrict the artifact to that macOS or newer. -->
+                    <configureArg>LDFLAGS=-arch x86_64 -target ${target} -mmacosx-version-min=${macCrossMinVersion}</configureArg>
+                  </configureArgs>
+                </configuration>
+                <goals>
+                  <goal>generate</goal>
+                  <goal>build</goal>
+                </goals>
+                <phase>compile</phase>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
     <profile>
       <id>linux-aarch64</id>
 

@@ -43,3 +43,4 @@ cmake-*
 
 # exclude file created by the flatten plugin
 .flattened-pom.xml
+/.mac-x86_64-deps/
