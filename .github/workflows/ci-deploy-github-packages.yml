@@ -162,7 +162,10 @@ jobs:
           java-version: 8
           distribution: zulu
 
+      # Run under bash: powershell splits -DnewVersion=2.0.82.Final-... on the dots and maven then
+      # sees ".0.82.Final-..." as a separate lifecycle phase.
       - name: Set test version
+        shell: bash
         run: ./mvnw.cmd -B -ntp -q ${{ env.VERSIONS_PLUGIN }}:set -DnewVersion=${{ env.TEST_VERSION }} -DgenerateBackupPoms=false -DprocessAllModules=true
 
       - name: Add msbuild to PATH
