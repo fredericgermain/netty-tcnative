@@ -1,0 +1,306 @@
+name: Deploy project to GitHub Packages
+
+# Throwaway variant of "Deploy project" for testing fork builds without any Maven Central,
+# GPG or SSH credentials. It stages the exact same artifacts and then pushes them to
+# GitHub Packages using the built-in GITHUB_TOKEN.
+on:
+  # workflow_dispatch is only offered for workflows that exist on the default branch, and this one
+  # deliberately lives on the tooling branch only -- it is kept off musl-compat so it stays out of
+  # the upstream pull request. Trigger on push to that branch instead.
+  push:
+    branches: [ alpine-musl-harness ]
+    # Anything that changes the produced artifact must be able to trigger a republish, not just the
+    # publishing machinery itself -- a pom or native-source change with the old filter silently did
+    # nothing.
+    paths:
+      - '.github/workflows/ci-deploy-github-packages.yml'
+      - '.github/scripts/**'
+      - 'scripts/**'
+      - 'pom.xml'
+      - 'boringssl-static/pom.xml'
+      - 'openssl-dynamic/**'
+      - 'docker/**'
+
+  # Usable once/if this workflow is also present on the default branch.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Test version to publish (must end with -SNAPSHOT)'
+        required: true
+        default: '2.0.82.Final-musl-test-SNAPSHOT'
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  MAVEN_OPTS: -Dhttp.keepAlive=false -Dmaven.wagon.http.pool=false -Dmaven.wagon.http.retryhandler.count=5 -Dmaven.wagon.httpconnectionManager.ttlSeconds=240
+  # Pinned as the build runs on JDK 8 and an unpinned versions:set resolves to whatever is latest.
+  VERSIONS_PLUGIN: org.codehaus.mojo:versions-maven-plugin:2.16.2
+  # inputs.version is only set for workflow_dispatch, so fall back to the same default on push.
+  TEST_VERSION: ${{ inputs.version || '2.0.82.Final-musl-test-SNAPSHOT' }}
+
+# Cancel running jobs when a new push happens to the same branch as otherwise it will
+# tie up too many resources without providing much value.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stage-snapshot:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - setup: centos6-x86_64
+            docker-compose-build: "-f docker/docker-compose.centos-6.yaml -f docker/docker-compose.centos-6.18.yaml build"
+            docker-compose-run: "-f docker/docker-compose.centos-6.yaml -f docker/docker-compose.centos-6.18.yaml run stage-snapshot"
+          - setup: debian7-x86_64
+            docker-compose-build: "-f docker/docker-compose.debian.yaml -f docker/docker-compose.debian-7.18.yaml build"
+            docker-compose-run: "-f docker/docker-compose.debian.yaml -f docker/docker-compose.debian-7.18.yaml run stage-snapshot"
+          - setup: centos7-aarch64
+            docker-compose-build: "-f docker/docker-compose.centos-7.yaml build"
+            docker-compose-run: "-f docker/docker-compose.centos-7.yaml run cross-compile-aarch64-stage-snapshot"
+
+    name: stage-snapshot-${{ matrix.setup }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Only needed to run versions:set below. The build itself runs inside the container.
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: 8
+          distribution: zulu
+
+      # The repository is bind mounted into the container as /code, so setting the version
+      # on the host is enough and the docker-compose service commands stay untouched.
+      - name: Set test version
+        run: ./mvnw -B -ntp -q ${{ env.VERSIONS_PLUGIN }}:set -DnewVersion=${{ env.TEST_VERSION }} -DgenerateBackupPoms=false -DprocessAllModules=true
+
+      # Cache .m2/repository
+      - uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: ~/.m2/repository
+          key: stage-snapshot-${{ matrix.setup }}-m2-repository-cache-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            stage-snapshot-${{ matrix.setup }}-m2-repository-cache-
+
+      - name: Create local staging directory
+        run: mkdir -p ~/local-staging
+
+      - name: Build docker image
+        run: docker compose ${{ matrix.docker-compose-build }}
+
+      - name: Stage snapshots to local staging directory
+        run: docker compose ${{ matrix.docker-compose-run }}
+
+      - name: Upload local staging directory
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.setup }}-local-staging
+          path: ~/local-staging
+          if-no-files-found: error
+          include-hidden-files: true
+
+  stage-snapshot-macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - setup: macos-x86_64
+            os: macos-15-intel
+          - setup: macos-aarch64
+            os: macos-15
+
+    runs-on: ${{ matrix.os }}
+    name:  ${{ matrix.setup }}  build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '8'
+
+      - name: Set test version
+        run: ./mvnw -B -ntp -q ${{ env.VERSIONS_PLUGIN }}:set -DnewVersion=${{ env.TEST_VERSION }} -DgenerateBackupPoms=false -DprocessAllModules=true
+
+      # Cache .m2/repository
+      # Caching of maven dependencies
+      - uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: ~/.m2/repository
+          key: pr-${{ matrix.setup }}-maven-cache-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            pr-${{ matrix.setup }}-maven-cache-
+
+      - name: Install tools via brew
+        run: brew bundle
+
+      - name: Create local staging directory
+        run: mkdir -p ~/local-staging
+
+      - name: Stage snapshots to local staging directory
+        run: ./mvnw -B -ntp -am -pl openssl-dynamic,boringssl-static clean package org.sonatype.plugins:nexus-staging-maven-plugin:deploy -DaltStagingDirectory=$HOME/local-staging -DskipTests=true
+
+      - name: Upload local staging directory
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.setup }}-local-staging
+          path: ~/local-staging
+          if-no-files-found: error
+          include-hidden-files: true
+
+  stage-snapshot-windows:
+    runs-on: windows-2022
+    name: stage-snapshot-windows-x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create local staging directory
+        run: mkdir local-staging
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: 8
+          distribution: zulu
+
+      # Run under bash: powershell splits -DnewVersion=2.0.82.Final-... on the dots and maven then
+      # sees ".0.82.Final-..." as a separate lifecycle phase.
+      - name: Set test version
+        shell: bash
+        run: ./mvnw.cmd -B -ntp -q ${{ env.VERSIONS_PLUGIN }}:set -DnewVersion=${{ env.TEST_VERSION }} -DgenerateBackupPoms=false -DprocessAllModules=true
+
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Configuring Developer Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86_amd64
+
+      - name: Install tools
+        uses: crazy-max/ghaction-chocolatey@v3
+        with:
+          args: install ninja nasm
+
+      # Cache .m2/repository
+      - uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: ~/.m2/repository
+          key: stage-snapshot-windows-m2-repository-cache-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            stage-snapshot-windows-m2-repository-cache-
+
+      - name: Build netty-tcnative-boringssl-static
+        run: ./mvnw.cmd --file pom.xml -am -pl boringssl-static clean package org.sonatype.plugins:nexus-staging-maven-plugin:deploy -DaltStagingDirectory=/local-staging -DskipRemoteStaging=true -DskipTests=true
+
+      - name: Upload local staging directory
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86_64-local-staging
+          path: /local-staging
+          if-no-files-found: error
+          include-hidden-files: true
+
+  deploy-staged-snapshots:
+    runs-on: ubuntu-latest
+    # Wait until we have staged everything
+    needs: [stage-snapshot, stage-snapshot-macos, stage-snapshot-windows]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: 8
+          distribution: zulu
+
+      # The uber jar is built from this checkout, so its poms need the test version too.
+      - name: Set test version
+        run: ./mvnw -B -ntp -q ${{ env.VERSIONS_PLUGIN }}:set -DnewVersion=${{ env.TEST_VERSION }} -DgenerateBackupPoms=false -DprocessAllModules=true
+
+      # Cache .m2/repository
+      - uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: ~/.m2/repository
+          key: deploy-staged-snapshot-m2-repository-cache-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            deploy-stage-snapshot-m2-repository-cache-
+
+      # GitHub Packages authenticates with the built-in token, so no repository secret is needed.
+      - uses: s4u/maven-settings-action@v3.0.0
+        with:
+          servers: |
+            [{
+              "id": "github",
+              "username": "${{ github.actor }}",
+              "password": "${{ secrets.GITHUB_TOKEN }}"
+            }]
+
+      # Hardcode the staging artifacts that need to be downloaded.
+      # These must match the matrix setups and windows build. There is currently no way to pull this out of the config.
+      - name: Download windows_x86_64 staging directory
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-x86_64-local-staging
+          path: ~/windows-x86_64-local-staging
+
+      - name: Download macos-aarch64 staging directory
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-aarch64-local-staging
+          path: ~/macos-aarch64-local-staging
+
+      - name: Download macos-x86_64 staging directory
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-x86_64-local-staging
+          path: ~/macos-x86_64-local-staging
+
+      - name: Download centos7-aarch64 staging directory
+        uses: actions/download-artifact@v4
+        with:
+          name: centos7-aarch64-local-staging
+          path: ~/centos7-aarch64-local-staging
+
+      - name: Download debian7-x86_64 staging directory
+        uses: actions/download-artifact@v4
+        with:
+          name: debian7-x86_64-local-staging
+          path: ~/debian7-x86_64-local-staging
+
+      - name: Download centos6-x86_64 staging directory
+        uses: actions/download-artifact@v4
+        with:
+          name: centos6-x86_64-local-staging
+          path: ~/centos6-x86_64-local-staging
+
+      - name: Copy previous build artifacts to local maven repository
+        run: bash ./.github/scripts/local_staging_install_snapshot.sh ~/.m2/repository ~/windows-x86_64-local-staging ~/macos-aarch64-local-staging ~/macos-x86_64-local-staging ~/centos7-aarch64-local-staging ~/debian7-x86_64-local-staging ~/centos6-x86_64-local-staging
+
+      - name: Generate uber jar and deploy to local staging.
+        run: |
+          mkdir -p ~/uber-local-staging
+          ./mvnw -B --file pom.xml -Puber-snapshot -pl boringssl-static clean package org.sonatype.plugins:nexus-staging-maven-plugin:deploy -DaltStagingDirectory=$HOME/uber-local-staging -DskipTests=true
+
+      - name: Merge staging repositories
+        run: bash ./.github/scripts/local_staging_merge_snapshot.sh ~/local-staging ~/windows-x86_64-local-staging ~/macos-aarch64-local-staging ~/macos-x86_64-local-staging ~/centos7-aarch64-local-staging ~/debian7-x86_64-local-staging ~/centos6-x86_64-local-staging ~/uber-local-staging
+
+      # The staging jobs recorded Maven Central as the destination in the .index file that
+      # deploy-staged replays, so point it at GitHub Packages before deploying. Doing it this way
+      # keeps the deploy on Maven's own deployer, which is what generates the timestamped snapshot
+      # artifacts and the maven-metadata.xml a client needs to resolve them.
+      - name: Retarget staged artifacts at GitHub Packages
+        run: bash ./.github/scripts/retarget_staging_index.sh ~/local-staging github https://maven.pkg.github.com/${{ github.repository }}
+
+      - name: Deploy local staged artifacts
+        run: ./mvnw -B --file pom.xml org.sonatype.plugins:nexus-staging-maven-plugin:deploy-staged -DaltStagingDirectory=$HOME/local-staging
