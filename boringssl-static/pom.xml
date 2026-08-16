@@ -1186,6 +1186,9 @@
         <linkStatic>true</linkStatic>
         <crossCompile>mac</crossCompile>
         <target>arm64-apple-macos11</target>
+        <!-- Which way the parent pom's crossCompile=mac APR build should go. -->
+        <macCrossTarget>${target}</macCrossTarget>
+        <macCrossHost>aarch64-apple-darwin</macCrossHost>
         <macOsxDeploymentTarget>OSX_DEPLOYMENT_TARGET=11.0</macOsxDeploymentTarget>
         <cmakeOsxDeploymentTarget>-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0</cmakeOsxDeploymentTarget>
         <!-- On *nix, add ASM flags to disable executable stack -->
@@ -1434,6 +1437,11 @@
         <linkStatic>true</linkStatic>
         <crossCompile>mac</crossCompile>
         <target>x86_64-apple-macos10.12</target>
+        <!-- Which way the parent pom's crossCompile=mac APR build should go. Without this it
+             built an arm64 APR regardless, and the link then failed: ld will not take an arm64
+             archive into an x86_64 library. -->
+        <macCrossTarget>${target}</macCrossTarget>
+        <macCrossHost>x86_64-apple-darwin</macCrossHost>
         <macOsxDeploymentTarget>OSX_DEPLOYMENT_TARGET=10.12</macOsxDeploymentTarget>
         <cmakeOsxDeploymentTarget>-DCMAKE_OSX_DEPLOYMENT_TARGET=10.12</cmakeOsxDeploymentTarget>
         <!-- On *nix, add ASM flags to disable executable stack -->
@@ -1443,7 +1451,6 @@
         <cflags>-target ${target} -Werror -fno-omit-frame-pointer -fvisibility=hidden -Wunused -Wno-unused-value -O3</cflags>
         <cppflags>-target ${target} -DHAVE_OPENSSL -I${boringsslSourceDir}/include</cppflags>
         <ldflags>-arch x86_64 -L${boringsslHome} -lssl -lcrypto</ldflags>
-        <!-- use aarch_64 as this is also what os.detected.arch will use on an aarch64 system -->
         <nativeJarFile>${project.build.directory}/${project.build.finalName}-${os.detected.name}-x86_64.jar</nativeJarFile>
         <nativeLibOsParts>${os.detected.name}_x86_64</nativeLibOsParts>
         <jniClassifier>${os.detected.name}-x86_64</jniClassifier>
@@ -1628,7 +1635,7 @@
                     </manifest>
 
                     <jar destfile="${nativeJarFile}" manifest="${nativeJarWorkdir}/META-INF/MANIFEST.MF" basedir="${nativeJarWorkdir}" index="true" excludes="META-INF/MANIFEST.MF,META-INF/INDEX.LIST" />
-                    <attachartifact file="${nativeJarFile}" classifier="${os.detected.name}-x86_64" type="jar" />
+                    <attachartifact file="${nativeJarFile}" classifier="${jniClassifier}" type="jar" />
                   </target>
                 </configuration>
               </execution>

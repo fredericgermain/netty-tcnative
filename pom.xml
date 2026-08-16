@@ -114,6 +114,14 @@
     <archBits>64</archBits>
     <linkStatic>false</linkStatic>
     <crossCompile>false</crossCompile>
+    <!--
+      Which architecture a crossCompile=mac build targets. Deliberately a sentinel and not an
+      architecture: the mac cross profiles in boringssl-static must each say which way they are
+      going, and the APR build fails loudly if one of them did not. See the crossCompile=mac
+      branch in the build-apr-linux-mac profile below.
+    -->
+    <macCrossTarget>unset</macCrossTarget>
+    <macCrossHost>unset</macCrossHost>
     <sslHome>${project.build.directory}/ssl</sslHome>
     <msvcSslIncludeDirs>${sslHome}/include</msvcSslIncludeDirs>
     <msvcSslLibDirs>${sslHome}/lib</msvcSslLibDirs>
@@ -735,11 +743,32 @@
                           <equals arg1="${crossCompile}" arg2="mac" />
                           <then>
                             <!--
+                              crossCompile says we are cross-compiling for macOS but not in which
+                              direction, so the target arch comes from the profile that asked:
+                              macCrossTarget is the clang triple, macCrossHost the autoconf one.
+                              They used to be hardcoded to arm64 here, which meant every mac cross
+                              profile got an arm64 APR no matter what it had asked for - the
+                              x86_64 one then failed at the link, since ld will not take an arm64
+                              archive into an x86_64 library.
+
+                              Both default to the sentinel "unset" in this pom rather than to an
+                              architecture, so that a profile which forgets to set them fails here
+                              instead of quietly building for whichever arch the default named.
+                            -->
+                            <fail message="crossCompile=mac requires macCrossTarget and macCrossHost to be set by the calling profile (see the mac cross profiles in boringssl-static/pom.xml).">
+                              <condition>
+                                <or>
+                                  <equals arg1="${macCrossTarget}" arg2="unset" />
+                                  <equals arg1="${macCrossHost}" arg2="unset" />
+                                </or>
+                              </condition>
+                            </fail>
+                            <!--
 +                             We need to set some extra variables as otherwise the configure of apr will fail when trying to cross-compile.
 +                             See https://stackoverflow.com/a/1605497/1074097
 +                           -->
                             <exec executable="configure" failonerror="true" dir="${aprSourceDir}" resolveexecutable="true">
-                              <arg line="--disable-shared --prefix=${aprHome} CFLAGS='-O3 -fno-omit-frame-pointer -fPIC -target arm64-apple-macos11' --host=aarch64-apple-darwin ${macOsxDeploymentTarget} ac_cv_have_decl_sys_siglist=no ac_cv_file__dev_zero=yes apr_cv_process_shared_works=yes apr_cv_mutex_robust_shared=no apr_cv_tcp_nodelay_with_cork=yes" />
+                              <arg line="--disable-shared --prefix=${aprHome} CFLAGS='-O3 -fno-omit-frame-pointer -fPIC -target ${macCrossTarget}' --host=${macCrossHost} ${macOsxDeploymentTarget} ac_cv_have_decl_sys_siglist=no ac_cv_file__dev_zero=yes apr_cv_process_shared_works=yes apr_cv_mutex_robust_shared=no apr_cv_tcp_nodelay_with_cork=yes" />
                             </exec>
                             <!--
                               Make will fail when it tries to use the gen_test_char program.
