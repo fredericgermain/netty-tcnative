@@ -73,10 +73,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Both legs run on Apple Silicon; osx-x86_64 is cross-compiled rather than built on the
+          # slower macos-15-intel hardware. matrix.setup is unchanged, so the uploaded artifact is
+          # still macos-x86_64-local-staging and the jobs that consume it by name do not change.
           - setup: macos-x86_64
-            os: macos-15-intel
+            os: macos-15
+            cross: true
+            maven-args: "-Pmac-intel-cross-compile"
           - setup: macos-aarch64
             os: macos-15
+            cross: false
+            maven-args: ""
 
     runs-on: ${{ matrix.os }}
     name:  ${{ matrix.setup }}  build
@@ -103,11 +110,29 @@ jobs:
       - name: Install tools via brew
         run: brew bundle
 
+      - name: Extract cross-compile dependency versions from pom.xml
+        if: ${{ matrix.cross }}
+        run: |
+          echo "OPENSSL_VERSION=$(./mvnw -q -Dexpression=opensslVersion -DforceStdout -N help:evaluate --no-transfer-progress)" >> $GITHUB_ENV
+          echo "APR_VERSION=$(./mvnw -q -Dexpression=aprVersion -DforceStdout -N help:evaluate --no-transfer-progress)" >> $GITHUB_ENV
+
+      # No restore-keys: see the comment on the same step in ci-pr.yml.
+      - name: Cache the x86_64 OpenSSL and APR
+        if: ${{ matrix.cross }}
+        uses: actions/cache@v4
+        with:
+          path: .mac-x86_64-deps
+          key: mac-x86_64-deps-openssl${{ env.OPENSSL_VERSION }}-apr${{ env.APR_VERSION }}-${{ hashFiles('scripts/build-mac-x86_64-deps.sh') }}
+
+      - name: Build the x86_64 OpenSSL and APR
+        if: ${{ matrix.cross }}
+        run: bash scripts/build-mac-x86_64-deps.sh
+
       - name: Create local staging directory
         run: mkdir -p ~/local-staging
 
       - name: Stage snapshots to local staging directory
-        run: ./mvnw -B -ntp -am -pl openssl-dynamic,boringssl-static clean package org.sonatype.plugins:nexus-staging-maven-plugin:deploy -DaltStagingDirectory=$HOME/local-staging -DskipTests=true
+        run: ./mvnw -B -ntp ${{ matrix.maven-args }} -am -pl openssl-dynamic,boringssl-static clean package org.sonatype.plugins:nexus-staging-maven-plugin:deploy -DaltStagingDirectory=$HOME/local-staging -DskipTests=true
 
       - name: Upload local staging directory
         uses: actions/upload-artifact@v4

@@ -145,16 +145,35 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Both legs run on Apple Silicon. osx-x86_64 is cross-compiled rather than built on
+          # macos-15-intel, which is real 2018 Core i7 hardware and takes 8-17 min against 4-6
+          # here. matrix.setup is unchanged so every artifact and cache key keeps its name.
           - setup: macos-x86_64
-            os: macos-15-intel
+            os: macos-15
+            cross: true
+            maven-args: "-Pmac-intel-cross-compile"
           - setup: macos-aarch64
             os: macos-15
+            cross: false
+            maven-args: ""
 
     runs-on: ${{ matrix.os }}
     name:  ${{ matrix.setup }} build
 
     steps:
       - uses: actions/checkout@v4
+
+      # An arm64 JVM cannot load an x86_64 .jnilib, so the cross leg needs a second, x86_64 JDK to
+      # run its tests in. It executes under Rosetta 2, which is preinstalled on this image. Set up
+      # first so the native JDK below wins JAVA_HOME and maven itself still runs arm64.
+      - name: Set up x86_64 JDK 8 for the cross-compiled tests
+        if: ${{ matrix.cross }}
+        id: x64jdk
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '8'
+          architecture: 'x64'
 
       - name: Set up JDK 8
         uses: actions/setup-java@v4
@@ -175,8 +194,28 @@ jobs:
       - name: Install tools via brew
         run: brew bundle
 
+      - name: Extract cross-compile dependency versions from pom.xml
+        if: ${{ matrix.cross }}
+        run: |
+          echo "OPENSSL_VERSION=$(./mvnw -q -Dexpression=opensslVersion -DforceStdout -N help:evaluate --no-transfer-progress)" >> $GITHUB_ENV
+          echo "APR_VERSION=$(./mvnw -q -Dexpression=aprVersion -DforceStdout -N help:evaluate --no-transfer-progress)" >> $GITHUB_ENV
+
+      # No restore-keys on purpose: a partial hit from a different OpenSSL or APR version would
+      # leave stale dylibs in place, and the script's "already built, skipping" guard keys off
+      # their presence - so it would silently link the wrong version. Exact match or rebuild.
+      - name: Cache the x86_64 OpenSSL and APR
+        if: ${{ matrix.cross }}
+        uses: actions/cache@v4
+        with:
+          path: .mac-x86_64-deps
+          key: mac-x86_64-deps-openssl${{ env.OPENSSL_VERSION }}-apr${{ env.APR_VERSION }}-${{ hashFiles('scripts/build-mac-x86_64-deps.sh') }}
+
+      - name: Build the x86_64 OpenSSL and APR
+        if: ${{ matrix.cross }}
+        run: bash scripts/build-mac-x86_64-deps.sh
+
       - name: Build project
-        run: ./mvnw -B -ntp --file pom.xml -am -pl openssl-dynamic,boringssl-static clean package
+        run: ./mvnw -B -ntp --file pom.xml ${{ matrix.maven-args }} -am -pl openssl-dynamic,boringssl-static clean package ${{ matrix.cross && format('-Djvm={0}/bin/java', steps.x64jdk.outputs.path) || '' }}
 
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}

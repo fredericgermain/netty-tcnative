@@ -19,7 +19,11 @@ set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 PREFIX="${1:-$HERE/.mac-x86_64-deps}"
-WORK="$PREFIX/src"
+# Outside $PREFIX so CI can cache the prefix wholesale: the unpacked sources are ~271M against
+# ~20M for what actually gets installed, and they are re-downloadable. target/ is gitignored, and
+# losing these to a clean costs a download rather than a rebuild - the skip guards below key off
+# the installed dylibs, not off these.
+WORK="${MAC_X86_64_DEPS_SRC:-$HERE/target/mac-x86_64-deps-src}"
 TARGET_TRIPLE=x86_64-apple-macos10.12
 JOBS=$(sysctl -n hw.ncpu)
 

@@ -269,10 +269,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Both legs run on Apple Silicon; osx-x86_64 is cross-compiled rather than built on the
+          # slower macos-15-intel hardware. matrix.setup is unchanged, so the uploaded artifact is
+          # still macos-x86_64-local-staging and deploy-staged-release, which downloads it by
+          # name, does not change.
           - setup: macos-x86_64
-            os: macos-15-intel
+            os: macos-15
+            cross: true
+            maven-args: "-Pmac-intel-cross-compile"
           - setup: macos-aarch64
             os: macos-15
+            cross: false
+            maven-args: ""
 
     runs-on: ${{ matrix.os }}
     name:  stage-release-${{ matrix.setup }}
@@ -334,12 +342,36 @@ jobs:
         working-directory: ./prepare-release-workspace/
         run: brew bundle
 
+      - name: Extract cross-compile dependency versions from pom.xml
+        if: ${{ matrix.cross }}
+        working-directory: ./prepare-release-workspace/
+        run: |
+          echo "OPENSSL_VERSION=$(./mvnw -q -Dexpression=opensslVersion -DforceStdout -N help:evaluate --no-transfer-progress)" >> $GITHUB_ENV
+          echo "APR_VERSION=$(./mvnw -q -Dexpression=aprVersion -DforceStdout -N help:evaluate --no-transfer-progress)" >> $GITHUB_ENV
+
+      # Keyed separately from the ci-pr/ci-deploy cache: the release job builds out of
+      # ./prepare-release-workspace/, so the prefix sits at a different absolute path and
+      # apr-1-config resolves against its own location.
+      - name: Cache the x86_64 OpenSSL and APR
+        if: ${{ matrix.cross }}
+        uses: actions/cache@v4
+        with:
+          path: ./prepare-release-workspace/.mac-x86_64-deps
+          key: mac-x86_64-deps-release-openssl${{ env.OPENSSL_VERSION }}-apr${{ env.APR_VERSION }}-${{ hashFiles('prepare-release-workspace/scripts/build-mac-x86_64-deps.sh') }}
+
+      # bash, not ./: the workspace arrives as a downloaded artifact, which does not preserve the
+      # executable bit - the same reason mvnw is chmod'd above.
+      - name: Build the x86_64 OpenSSL and APR
+        if: ${{ matrix.cross }}
+        working-directory: ./prepare-release-workspace/
+        run: bash scripts/build-mac-x86_64-deps.sh
+
       - name: Create local staging directory
         run: mkdir -p ~/local-staging
 
       - name: Stage snapshots to local staging directory
         working-directory: ./prepare-release-workspace/
-        run: ./mvnw -B -ntp -am -pl openssl-dynamic,boringssl-static clean javadoc:jar package gpg:sign org.sonatype.central:central-publishing-maven-plugin:publish -DskipTests=true
+        run: ./mvnw -B -ntp ${{ matrix.maven-args }} -am -pl openssl-dynamic,boringssl-static clean javadoc:jar package gpg:sign org.sonatype.central:central-publishing-maven-plugin:publish -DskipTests=true
 
       - name: Upload local staging directory
         uses: actions/upload-artifact@v4
