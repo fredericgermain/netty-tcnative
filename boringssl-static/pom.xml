@@ -1197,7 +1197,11 @@
         <cmakeCxxFlags>-O3 -fno-omit-frame-pointer -target ${target} -Wno-error=range-loop-analysis</cmakeCxxFlags>
         <cflags>-target ${target} -Werror -fno-omit-frame-pointer -fvisibility=hidden -Wunused -Wno-unused-value -O3</cflags>
         <cppflags>-target ${target} -DHAVE_OPENSSL -I${boringsslSourceDir}/include</cppflags>
-        <ldflags>-arch arm64 -L${boringsslHome} -lssl -lcrypto</ldflags>
+        <!-- See the note on the same flag in mac-intel-cross-compile. Not verified by a build
+             here: this direction only runs on an Intel host, which is exactly what the CI change
+             retires, so it is fixed for consistency rather than measured. -->
+        <macCrossMinVersion>11.0</macCrossMinVersion>
+        <ldflags>-arch arm64 -mmacosx-version-min=${macCrossMinVersion} -L${boringsslHome} -lssl -lcrypto</ldflags>
         <!-- use aarch_64 as this is also what os.detected.arch will use on an aarch64 system -->
         <nativeJarFile>${project.build.directory}/${project.build.finalName}-${os.detected.name}-aarch_64.jar</nativeJarFile>
         <nativeLibOsParts>${os.detected.name}_aarch_64</nativeLibOsParts>
@@ -1450,7 +1454,12 @@
         <cmakeCxxFlags>-O3 -fno-omit-frame-pointer -target ${target} -Wno-error=range-loop-analysis</cmakeCxxFlags>
         <cflags>-target ${target} -Werror -fno-omit-frame-pointer -fvisibility=hidden -Wunused -Wno-unused-value -O3</cflags>
         <cppflags>-target ${target} -DHAVE_OPENSSL -I${boringsslSourceDir}/include</cppflags>
-        <ldflags>-arch x86_64 -L${boringsslHome} -lssl -lcrypto</ldflags>
+        <!-- -mmacosx-version-min, not -target: libtool drops -target from the link line, and
+             without a version on it the linker stamps LC_BUILD_VERSION from the host SDK - which
+             produced minos 26.0 here, i.e. a library loadable only on macOS 26 or newer. Same
+             finding as the LDFLAGS comment in openssl-dynamic's cross profile. -->
+        <macCrossMinVersion>10.12</macCrossMinVersion>
+        <ldflags>-arch x86_64 -mmacosx-version-min=${macCrossMinVersion} -L${boringsslHome} -lssl -lcrypto</ldflags>
         <nativeJarFile>${project.build.directory}/${project.build.finalName}-${os.detected.name}-x86_64.jar</nativeJarFile>
         <nativeLibOsParts>${os.detected.name}_x86_64</nativeLibOsParts>
         <jniClassifier>${os.detected.name}-x86_64</jniClassifier>
