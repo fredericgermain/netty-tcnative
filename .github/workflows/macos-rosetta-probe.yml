@@ -1,0 +1,107 @@
+# Throwaway probe: can the macos-15 (Apple Silicon) runner execute the cross-built osx-x86_64
+# artifact's test suite? Two separate things have to be true and neither is documented:
+#
+#   1. Rosetta 2 must be present, or installable. The arm64 runner image README does not mention
+#      it, and the runner reports "Apple M1 (Virtual)" -- inside a VM Rosetta has to be provisioned
+#      by the host, so "macOS supports Rosetta" is not the same claim.
+#   2. An x86_64 JVM must be obtainable. This is the one that is easy to miss: Rosetta alone buys
+#      nothing here, because the runner's JDK is arm64 and an arm64 JVM cannot load an x86_64
+#      .jnilib no matter what translation is available.
+#
+# ANSWERED, on macos-15-arm64 image 20260727.0256 (run 31973721566):
+#
+#   RESULT rosetta-preinstalled yes
+#   RESULT rosetta-usable       yes
+#   RESULT x64-jdk              yes
+#     JAVA_HOME .../Java_Zulu_jdk/8.0.502-7/x64/Contents/Home
+#     bin/java: Mach-O 64-bit executable x86_64
+#     os.arch = x86_64
+#
+# So ci-pr.yml runs the cross-built x86_64 tests on macos-15: actions/setup-java with
+# architecture: x64 for the JDK, handed to surefire via -Djvm so only the forked test JVM is
+# translated and maven itself stays arm64.
+#
+# Parked here rather than deleted so the claim can be re-checked when the runner image changes -
+# it is an undocumented property of that image, not a guarantee. To re-run, push this file to a
+# branch named macos-rosetta-probe; workflow_dispatch is only offered for workflows that exist on
+# the default branch, which this one deliberately does not.
+name: macOS Rosetta probe
+
+on:
+  push:
+    branches: [ macos-rosetta-probe ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: macos-15
+    steps:
+      - name: Host facts
+        run: |
+          echo "uname -m         $(uname -m)"
+          echo "uname -p         $(uname -p)"
+          echo "cpu.brand_string $(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo absent)"
+          echo "hw.optional.arm64 $(sysctl -n hw.optional.arm64 2>/dev/null || echo absent)"
+
+      # `arch -x86_64` is the cheapest true/false test: it fails outright with no Rosetta.
+      - name: Is Rosetta already present
+        id: pre
+        run: |
+          if arch -x86_64 /usr/bin/uname -m 2>/dev/null; then
+            echo "present=yes" >> $GITHUB_OUTPUT
+            echo "RESULT rosetta-preinstalled yes"
+          else
+            echo "present=no" >> $GITHUB_OUTPUT
+            echo "RESULT rosetta-preinstalled no"
+          fi
+
+      - name: Try installing Rosetta
+        if: steps.pre.outputs.present == 'no'
+        run: |
+          # Non-fatal: a failure here IS the finding.
+          if sudo softwareupdate --install-rosetta --agree-to-license; then
+            echo "RESULT rosetta-installable yes"
+          else
+            echo "RESULT rosetta-installable no (exit $?)"
+          fi
+
+      - name: Re-test after install attempt
+        run: |
+          if arch -x86_64 /usr/bin/uname -m 2>/dev/null; then
+            echo "RESULT rosetta-usable yes"
+          else
+            echo "RESULT rosetta-usable no"
+          fi
+
+      # The decisive one. Even with Rosetta, the tests need an x86_64 JVM to load an x86_64 dylib.
+      - name: Can we get an x86_64 JDK
+        id: jdk
+        continue-on-error: true
+        uses: actions/setup-java@v4
+        with:
+          # Match what the real mac legs use (ci-pr.yml:159-161), so the answer transfers.
+          distribution: 'zulu'
+          java-version: '8'
+          architecture: 'x64'
+
+      - name: Does that JVM actually run
+        run: |
+          echo "setup-java outcome: ${{ steps.jdk.outcome }}"
+          if [ "${{ steps.jdk.outcome }}" != "success" ]; then
+            echo "RESULT x64-jdk no (setup-java failed)"
+            exit 0
+          fi
+          echo "JAVA_HOME=$JAVA_HOME"
+          if file "$JAVA_HOME/bin/java"; then :; fi
+          if "$JAVA_HOME/bin/java" -XshowSettings:properties -version 2>&1 | grep -E 'os.arch|java.version'; then
+            echo "RESULT x64-jdk yes"
+          else
+            echo "RESULT x64-jdk no (jvm did not run)"
+          fi
+
+      - name: Verdict
+        if: always()
+        run: echo "Probe finished -- read the RESULT lines above."
