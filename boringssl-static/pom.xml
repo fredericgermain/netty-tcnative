@@ -1197,7 +1197,7 @@
         <cmakeCxxFlags>-O3 -fno-omit-frame-pointer -target ${target} -Wno-error=range-loop-analysis</cmakeCxxFlags>
         <cflags>-target ${target} -Werror -fno-omit-frame-pointer -fvisibility=hidden -Wunused -Wno-unused-value -O3</cflags>
         <cppflags>-target ${target} -DHAVE_OPENSSL -I${boringsslSourceDir}/include</cppflags>
-        <ldflags>-arch arm64 -L${boringsslHome}/ssl -L${boringsslHome}/crypto -lssl -lcrypto</ldflags>
+        <ldflags>-arch arm64 -L${boringsslHome} -lssl -lcrypto</ldflags>
         <!-- use aarch_64 as this is also what os.detected.arch will use on an aarch64 system -->
         <nativeJarFile>${project.build.directory}/${project.build.finalName}-${os.detected.name}-aarch_64.jar</nativeJarFile>
         <nativeLibOsParts>${os.detected.name}_aarch_64</nativeLibOsParts>
