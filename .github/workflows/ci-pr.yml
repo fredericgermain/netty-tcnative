@@ -214,6 +214,24 @@ jobs:
         if: ${{ matrix.cross }}
         run: bash scripts/build-mac-x86_64-deps.sh
 
+      # openssl-dynamic links OpenSSL and APR shared, and the artifact records the Homebrew paths
+      # a native Intel build produces - /usr/local/opt/... - which is what makes it correct for the
+      # Intel machines it ships to. Those paths do not exist on an arm64 runner, where Homebrew is
+      # /opt/homebrew, so the library builds fine and then cannot load when the tests run it.
+      # Put the x86_64 libraries at exactly the paths it asks for.
+      #
+      # Symlinks at the recorded paths, deliberately not DYLD_LIBRARY_PATH: dyld resolves that by
+      # leaf name, so it would satisfy the library no matter which install name was baked in, and
+      # would mask a wrong path in build-mac-x86_64-deps.sh - which nothing else checks. This way
+      # the tests only pass if the install names are actually right.
+      - name: Put the x86_64 dependencies where the artifact expects them
+        if: ${{ matrix.cross }}
+        run: |
+          sudo mkdir -p /usr/local/opt/openssl@3 /usr/local/opt/apr
+          sudo ln -sfn "$PWD/.mac-x86_64-deps/lib" /usr/local/opt/openssl@3/lib
+          sudo ln -sfn "$PWD/.mac-x86_64-deps/lib" /usr/local/opt/apr/lib
+          ls -l /usr/local/opt/openssl@3/lib/libssl.3.dylib /usr/local/opt/apr/lib/libapr-1.0.dylib
+
       - name: Build project
         run: ./mvnw -B -ntp --file pom.xml ${{ matrix.maven-args }} -am -pl openssl-dynamic,boringssl-static clean package ${{ matrix.cross && format('-Djvm={0}/bin/java', steps.x64jdk.outputs.path) || '' }}
 
