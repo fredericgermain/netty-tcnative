@@ -1,0 +1,98 @@
+name: Publish build images
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'docker/**'
+      - 'pom.xml'
+      - '.github/scripts/buildenv_tag.sh'
+      - '.github/workflows/ci-build-images.yml'
+
+  # Refresh the images so base-image security updates land even when nothing here changes.
+  schedule:
+    - cron: '0 4 * * 1'  # At 04:00 on Monday, after the build/deploy crons at 03:30.
+
+  # Needed to bootstrap: until this has run once, every consumer falls back to building
+  # locally, which is exactly the behaviour that predates these images.
+  workflow_dispatch:
+
+# The only workflow granted packages:write, and it never runs on pull_request, so code from
+# a fork can never reach the push credential.
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - setup: centos6-x86_64
+            docker-bake-args: "-f docker-compose.centos-6.yaml -f docker-compose.centos-6.18.yaml"
+            image-inputs: "docker/Dockerfile.centos6 docker/docker-compose.centos-6.yaml docker/docker-compose.centos-6.18.yaml"
+          - setup: debian7-x86_64
+            docker-bake-args: "-f docker-compose.debian.yaml -f docker-compose.debian-7.18.yaml"
+            image-inputs: "docker/Dockerfile.debian docker/docker-compose.debian.yaml docker/docker-compose.debian-7.18.yaml"
+          - setup: centos7-aarch64
+            docker-bake-args: "-f docker-compose.centos-7.yaml"
+            image-inputs: "docker/Dockerfile.cross_compile_aarch64 docker/docker-compose.centos-7.yaml"
+          - setup: al2023-x86_64-aws_lc
+            docker-bake-args: "-f docker-compose.al2023.yaml"
+            image-inputs: "docker/Dockerfile.al2023 docker/docker-compose.al2023.yaml"
+
+    name: ${{ matrix.setup }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract OpenSSL version from pom.xml
+        run: echo "OPENSSL_VERSION=$(./mvnw -q -Dexpression=opensslVersion -DforceStdout -N help:evaluate --no-transfer-progress)" >> $GITHUB_ENV
+
+      - name: Extract OpenSSL SHA256 from pom.xml
+        run: echo "OPENSSL_SHA256=$(./mvnw -q -Dexpression=opensslSha256 -DforceStdout -N help:evaluate --no-transfer-progress)" >> $GITHUB_ENV
+
+      - name: Resolve the image refs
+        id: buildenv
+        run: .github/scripts/buildenv_tag.sh "${{ github.repository }}" "${{ matrix.setup }}" ${{ matrix.image-inputs }} >> "$GITHUB_OUTPUT"
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # cache-to=type=inline rides the cache metadata along in the image itself, which is what
+      # lets a consumer that has to fall back to building seed itself from the published image
+      # with cache-from=type=registry. It needs no separate cache artifact and no Actions cache.
+      - name: Build and push the image
+        working-directory: docker
+        env:
+          BUILDX_BAKE_ENTITLEMENTS_FS: "0"
+        run: |
+          docker buildx bake ${{ matrix.docker-bake-args }} --push \
+            --set "*.tags=${{ steps.buildenv.outputs.ref }}" \
+            --set "*.cache-to=type=inline"
+
+      # A server-side manifest copy, not a second push. Done as its own step rather than a
+      # second --set "*.tags=", whose append-versus-override behaviour is not worth relying on.
+      - name: Move the -latest alias
+        run: |
+          docker buildx imagetools create \
+            -t "${{ steps.buildenv.outputs.latest }}" \
+            "${{ steps.buildenv.outputs.ref }}"
+
+      - name: Summarise
+        run: |
+          echo "Published \`${{ steps.buildenv.outputs.ref }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Aliased as \`${{ steps.buildenv.outputs.latest }}\`" >> "$GITHUB_STEP_SUMMARY"
