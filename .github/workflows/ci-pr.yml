@@ -29,15 +29,23 @@ jobs:
           - setup: centos6-x86_64
             docker-compose-run: "-f docker/docker-compose.centos-6.yaml -f docker/docker-compose.centos-6.18.yaml run build"
             docker-bake-args: "-f docker-compose.centos-6.yaml -f docker-compose.centos-6.18.yaml"
+            local-image: "netty-tcnative-centos:centos-6-1.8"
+            image-inputs: "docker/Dockerfile.centos6 docker/docker-compose.centos-6.yaml docker/docker-compose.centos-6.18.yaml"
           - setup: debian7-x86_64
             docker-compose-run: "-f docker/docker-compose.debian.yaml -f docker/docker-compose.debian-7.18.yaml run build-dynamic-only"
             docker-bake-args: "-f docker-compose.debian.yaml -f docker-compose.debian-7.18.yaml"
+            local-image: "netty-tcnative-debian:debian-7-1.8"
+            image-inputs: "docker/Dockerfile.debian docker/docker-compose.debian.yaml docker/docker-compose.debian-7.18.yaml"
           - setup: centos7-aarch64
             docker-compose-run: "-f docker/docker-compose.centos-7.yaml run cross-compile-aarch64-build"
             docker-bake-args: "-f docker-compose.centos-7.yaml"
+            local-image: "netty-tcnative-centos:cross_compile_aarch64"
+            image-inputs: "docker/Dockerfile.cross_compile_aarch64 docker/docker-compose.centos-7.yaml"
           - setup: al2023-x86_64-aws_lc
             docker-compose-run: "-f docker/docker-compose.al2023.yaml run build"
             docker-bake-args: "-f docker-compose.al2023.yaml"
+            local-image: "netty-tcnative-al2023:x86_64"
+            image-inputs: "docker/Dockerfile.al2023 docker/docker-compose.al2023.yaml"
 
     name: ${{ matrix.setup }}
     steps:
@@ -45,24 +53,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
-
-      # The bake step below asks for cache-from/cache-to type=gha, but the runner only exposes
-      # ACTIONS_RUNTIME_TOKEN and ACTIONS_RESULTS_URL to JavaScript actions, not to `run:` steps.
-      # Calling buildx directly from `run:` therefore left both options inert: builds imported and
-      # exported nothing, silently and without an error, so every run rebuilt the images from
-      # scratch. Re-export them into the job environment so buildx can reach the cache service.
-      - name: Expose the Actions cache service to buildx
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
-        with:
-          script: |
-            // ACTIONS_RESULTS_URL only, never ACTIONS_CACHE_URL: the latter points at the
-            // decommissioned v1 cache service, and buildx prefers it when it is set, which
-            // fails the build with "failed to parse error response 400".
-            for (const name of ['ACTIONS_RUNTIME_TOKEN', 'ACTIONS_RESULTS_URL']) {
-              if (process.env[name]) {
-                core.exportVariable(name, process.env[name]);
-              }
-            }
 
       # Cache .m2/repository
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
@@ -79,11 +69,44 @@ jobs:
       - name: Extract OpenSSL SHA256 from pom.xml
         run: echo "OPENSSL_SHA256=$(./mvnw -q -Dexpression=opensslSha256 -DforceStdout -N help:evaluate --no-transfer-progress)" >> $GITHUB_ENV
 
-      - name: Build docker image
+      - name: Resolve the build environment image
+        id: buildenv
+        run: .github/scripts/buildenv_tag.sh "${{ github.repository }}" "${{ matrix.setup }}" ${{ matrix.image-inputs }} >> "$GITHUB_OUTPUT"
+
+      # Only needed while the package is private. Once it is public the pull below succeeds
+      # anonymously, which is what lets pull requests from forks - whose GITHUB_TOKEN is
+      # read-only and cannot read a private package - hit the image instead of rebuilding it.
+      - name: Log in to ghcr.io
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        continue-on-error: true
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull the prebuilt build environment
+        id: buildenv_pull
+        continue-on-error: true
+        run: docker pull "${{ steps.buildenv.outputs.ref }}"
+
+      # docker compose only skips building when an image already exists under exactly the name
+      # the compose files pin, so retag rather than teaching the compose files a registry path.
+      # One retag covers every service in the file; they all share the one image name.
+      - name: Retag the prebuilt build environment
+        if: steps.buildenv_pull.outcome == 'success'
+        run: docker tag "${{ steps.buildenv.outputs.ref }}" "${{ matrix.local-image }}"
+
+      # Reached when this branch changes a Dockerfile or a compose file, so nothing published
+      # matches yet - the publisher only runs on main. Seed from the last published image for
+      # this leg so only the layers at and after the edit actually rebuild.
+      - name: Build the build environment (nothing published matches)
+        if: steps.buildenv_pull.outcome != 'success'
         working-directory: docker
         env:
           BUILDX_BAKE_ENTITLEMENTS_FS: "0"
-        run: docker buildx bake ${{ matrix.docker-bake-args }} --load --set "*.cache-from=type=gha,scope=${{ matrix.setup }}" --set "*.cache-to=type=gha,scope=${{ matrix.setup }},mode=max"
+        run: |
+          docker buildx bake ${{ matrix.docker-bake-args }} --load \
+            --set "*.cache-from=type=registry,ref=${{ steps.buildenv.outputs.latest }}"
 
       - name: Build project
         run: docker compose ${{ matrix.docker-compose-run }} | tee build.output
